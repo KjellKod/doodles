@@ -1,3 +1,6 @@
+""Simple Git doodle tryout""
+Nothing else. 
+
 This is the top.
 
 
