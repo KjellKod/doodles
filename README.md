@@ -1,5 +1,5 @@
 ""Simple Git doodle tryout""
-Nothing else. 
+This will Rock!
 
 This is the top.
 
