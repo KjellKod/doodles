@@ -13,6 +13,34 @@
 #include "shared_queue.h"
 
 using namespace std;
+typedef std::function<void() > Callback;
+class Active {
+   shared_queue<Callback> q;
+   atomic<bool> go;
+   std::thread thd;
+   void flagToExit() {  go = false; }
+   void internal_run() {
+      while (go) {
+         Callback call;
+         q.wait_and_pop(call);
+         call;
+      }
+   }
+public:
+   Active() { go = true;}
+   ~Active() {
+      function<void() > quit_token = std::bind(&Active::flagToExit, this);
+      q.push(quit_token);
+      thd.join();
+   }
+   static std::unique_ptr<Active> createActive() {
+      std::unique_ptr<Active> ptr(new Active());
+      ptr->thd = std::thread(&Active::internal_run, ptr.get());
+      return ptr;
+   }
+};
+
+
 
 namespace {
 
@@ -37,75 +65,50 @@ namespace {
    auto print3 = [](string s1, string s2, string s3) ->void {
       cout << s1 << s2 << s3 << endl;
    };
-   
+
    void call1() {
-   show("Hello", 1, 2, 3, string("World"));
-   cout << "NEXXT\n\n\n" << endl;
+      show("Hello", 1, 2, 3, string("World"));
+      cout << "NEXXT\n\n\n" << endl;
 
-   callAFunction(print3, "one", "two", "three");
-}
-
-   
-  //template<typename Call, typename... Args>
-  // void callAFunction(Call& call, const Args&... args) {
-  //    function<void() > func = bind(call, args...);
-  //    func();
-  // }
+      callAFunction(print3, "one", "two", "three");
+   }
 
 
-      
+   //template<typename Call, typename... Args>
+   // void callAFunction(Call& call, const Args&... args) {
+   //    function<void() > func = bind(call, args...);
+   //    func();
+   // }
+
+
+
    //template<typename Call, typename... Args>
    //std::future<typename std::result_of<Call()>::type>  
    //       TaskCall(Call& call, Args&... args) {
+
    template<typename Call, typename... Args>
    std::future<void> TaskCall(Call call, Args... args) {
-      
-      typedef typename std::result_of<Call(Args...)>::type result_type;     
-      typedef std::packaged_task<result_type()> task_type;
-      
-      auto callback = bind(call, args...); //function<result_type()> func2 = bind...
-      auto f1 = async(callback);  // this is put on a queue instead
+
+      typedef typename std::result_of < Call(Args...)>::type result_type;
+      typedef std::packaged_task < result_type() > task_type;
+
+      auto callback = bind(call, args...); 
+      auto f1 = async(callback); // this is put on a queue instead
       return f1;
    }
 } // a. namespace
 
 
-struct sink{
+
+struct sink {
    std::string pre;
-   void addTextBeforePrint(const std::string& text){ pre.append(text);}
-   void print(const std::string& text) {cout << pre << " " << text << endl;}
-};
 
-
-typedef std::function<void()> Callback;
-class Active{
-   shared_queue<Callback> q;
-   atomic<bool> go;
-   std::thread thd;
-
-   void flagToExit(){go = false; }
-   
-   void internal_run() {
-     while(go) {
-        Callback call;
-        q.wait_and_pop(call);
-        call;
-     }   
+   void addTextBeforePrint(const std::string& text) {
+      pre.append(text);
    }
- 
-public:
-   Active(){go = true; }
-   ~Active(){
-      function<void()> quit_token = std::bind(&Active::flagToExit, this); //[](atomic<bool>& flag){ flag = false; };
-      q.push(quit_token);
-      thd.join();
-   }
-   
-     
-   static std::unique_ptr<Active> createActive() {
-      std::unique_ptr<Active> ptr(new Active());
-      ptr->thd = std::thread(&Active::internal_run, ptr.get());
-      return ptr;
+
+   void print(const std::string& text) {
+      cout << pre << " " << text << endl;
    }
 };
 
@@ -113,14 +116,16 @@ public:
 
 
 void call2() {
-   auto f1 = [](std::string arg){cout << "callX Hello: " << arg << endl; };
-   f1("K1");   
-    auto f2 = async(f1, "K2-future");
-    f2.wait();
-    
-    std::string str{"K3-future through task"};
-    auto f3 = TaskCall(f1, str);
-    f3.wait();
+   auto f1 = [](std::string arg) {
+      cout << "callX Hello: " << arg << endl;
+   };
+   f1("K1");
+   auto f2 = async(f1, "K2-future");
+   f2.wait();
+
+   std::string str{"K3-future through task"};
+   auto f3 = TaskCall(f1, str);
+   f3.wait();
 }
 
 int main() {
@@ -129,8 +134,8 @@ int main() {
 
    //callAFunction(print3, "one", "two", "three");
 
-   //auto res = TaskCall(print3, "future: ", "I hope ", "this works!");
-   
+   auto res = TaskCall(print3, "future: ", "I hope ", "this works!");
+
    return 0;
 }
 
