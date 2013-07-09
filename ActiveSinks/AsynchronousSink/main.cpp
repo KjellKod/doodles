@@ -9,8 +9,8 @@
 #include <functional>
 #include <future>
 #include <thread>
-#include <chrono>
-
+#include <memory>
+#include "shared_queue.h"
 
 using namespace std;
 
@@ -68,6 +68,46 @@ namespace {
       return f1;
    }
 } // a. namespace
+
+
+struct sink{
+   std::string pre;
+   void addTextBeforePrint(const std::string& text){ pre.append(text);}
+   void print(const std::string& text) {cout << pre << " " << text << endl;}
+};
+
+
+typedef std::function<void()> Callback;
+class Active{
+   shared_queue<Callback> q;
+   atomic<bool> go;
+   std::thread thd;
+
+   void flagToExit(){go = false; }
+   
+   void internal_run() {
+     while(go) {
+        Callback call;
+        q.wait_and_pop(call);
+        call;
+     }   
+   }
+ 
+public:
+   Active(){go = true; }
+   ~Active(){
+      function<void()> quit_token = std::bind(&Active::flagToExit, this); //[](atomic<bool>& flag){ flag = false; };
+      q.push(quit_token);
+      thd.join();
+   }
+   
+     
+   static std::unique_ptr<Active> createActive() {
+      std::unique_ptr<Active> ptr(new Active());
+      ptr->thd = std::thread(&Active::internal_run, ptr.get());
+      return ptr;
+   }
+};
 
 
 
