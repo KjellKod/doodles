@@ -8,141 +8,62 @@
 #include <iostream>
 #include <functional>
 #include <future>
+#include <utility>
 #include <thread>
 #include <memory>
+#include <type_traits>
 #include <vector>
 #include <map>  // change this to unordered_map
-#include "shared_queue.h"
+#include "Active.h"
 
 using namespace std;
-typedef std::function<void() > Callback;
 
-class Active {
-   shared_queue<Callback> q;
-   atomic<bool> go;
-   std::thread thd;
-
-   void flagToExit() {
-      go = false;
-   }
-
-   void internal_run() {
-      while (go) {
-         Callback call;
-         q.wait_and_pop(call);
-         call();
-      }
-   }
-public:
-
-   Active() {
-      go = true;
-   }
-
-   ~Active() {
-      function<void() > quit_token = std::bind(&Active::flagToExit, this);
-      q.push(quit_token);
-      thd.join();
-   }
-
-   // Add asynchronously a work-message to queue
-
-   void send(Callback msg_) {
-      q.push(msg_);
-   }
-
-   static std::unique_ptr<Active> createActive() {
-      std::unique_ptr<Active> ptr(new Active());
-      ptr->thd = std::thread(&Active::internal_run, ptr.get());
-      return ptr;
-   }
-};
 
 
 
 namespace {
-
+   void somePrint(string msg){ cout << msg << endl;}
+   
    template<typename Args>
-   void show(const Args& arg) {
-      cout << arg << endl;
-   }
+   void show(const Args& arg) {cout << arg << endl; }
 
    template<typename Head, typename... Args>
-   void show(Head call, const Args&... args) {
-      cout << call << endl;
-      show(args...);
-   }
+   void show(Head call, const Args&... args) { cout << call << endl;        show(args...); }
 
    template<typename Call, typename... Args>
-   void callAFunction(Call& call, const Args&... args) {
-      function<void() > func = bind(call, args...);
-      func();
-   }
-
-
-   auto print3 = [](string s1, string s2, string s3) ->void {
-      cout << s1 << s2 << s3 << endl;
-   };
-
-   void call1() {
-      show("Hello", 1, 2, 3, string("World"));
-      cout << "NEXXT\n\n\n" << endl;
-
-      callAFunction(print3, "one", "two", "three");
-   }
-
+   void callAFunction(Call& call, const Args&... args) { function<void() > func = bind(call, args...);          func();   }
+   
+   
    template<typename Call, typename... Args>
-   std::future<typename std::result_of<Call(Args...)>::type> TaskCall(Call call, Args... args)
-   //-> decltype(std::async(std::function<typename std::result_of<Call(Args...)>::type>))
-   {
+   std::future<typename std::result_of<Call(Args...)>::type> TaskCall(Call call, Args&&... args) {
       typedef typename std::result_of < Call(Args...)>::type result_type;
       typedef std::packaged_task < result_type() > task_type;
-
-      auto callback = bind(call, args...);
+      
+      auto callback = bind(call, std::forward<Args>(args)...);
       auto f1 = async(callback); // this is put on a queue instead
       return f1;
    }
 
-
+   
+   
+   
+   auto print3 = [](string s1, string s2, string s3) ->void {cout << s1 << s2 << s3 << endl; };
+   void call1() {show("K1-Hello", 1, 2, 3, string("World")); callAFunction(print3, "one", "two", "three");}
+   void call2() {std::string str{"K2-future through task"}; auto f3 = TaskCall([](string msg){cout << msg << endl;}, str); f3.wait();}
+   void call3() {auto res = TaskCall(print3, "K3-future: ", "I hope ", "this works!");res.wait();}
+   
 } // a. namespace
-
-void call2() {
-   auto f1 = [](std::string arg) {
-      cout << "callX Hello: " << arg << endl;
-   };
-   f1("K1");
-   auto f2 = async(f1, "K2-future");
-   f2.wait();
-
-   std::string str{"K3-future through task"};
-   auto f3 = TaskCall(f1, str);
-   f3.wait();
-}
-
-void call3() {
-   auto res = TaskCall(print3, "future: ", "I hope ", "this works!");
-   res.wait();
-}
 
 
 namespace {
 
    struct sink {
-   protected:
       std::string pre;
-   public:
-
-      void addTextBeforePrint(const std::string& text) {
-         pre.append(text);
-      }
-
-      virtual void print(const std::string& text) {
-         cout << pre << " " << text << endl;
-      }
+      void addTextBeforePrint(std::string text) {pre.append(text);}
+      virtual void print(const std::string& text) {cout << pre << " " << text << endl;}
    };
    
-   struct sink2 : public sink 
-   {
+   struct sink2 : public sink {
       std::string post;
       void addTextAfterPrint(const std::string& text) { post.append(text); }
       virtual void print(const std::string& text) {cout << pre << " " << text << post << endl; }
@@ -150,33 +71,107 @@ namespace {
    
    
 
-   template<typename Call, typename... Args>
-   std::future<typename std::result_of<Call(Args...)>::type> AsyncQCall(Call call, Args... args) {
+
+ 
+   
+   
+
+
+   
+   
+   template<typename XSink>
+   struct sink_handler{
+   private:
+      shared_ptr<XSink> sink;
+      shared_ptr<shared_queue<Callback>> msgQ;
+
+   public:
+      template<typename Call, typename... Args>
+      //std::future<typename std::result_of<Call(Args...)>::type> 
+      void spawn_sink_task(Call call, Args&&... args) {
       typedef typename std::result_of < Call(Args...)>::type result_type;
       typedef std::packaged_task < result_type() > task_type;
-
-      auto callback = bind(call, args...);
-      auto f1 = async(callback); // this is put on a queue insteayd
-      return f1;
+      
+      //auto callback = bind(call, sink.get(), args...);
+      auto callback2 = bind(&somePrint, args...);
+      auto f1 = async(callback2);
+      f1.wait();
+      //return std::move(f1);
+      
+//        auto callback = bind(call, sink.get(), args...);
+//        task_type task(std::move(callback));
+      
+//      auto future_result = task.get_future();
+//      msgQ->push(PretendToBeCopyable<task_type>(std::move(task)));
+//      return future_result;
    }
-
-
-   typedef unique_ptr<Active> activeptr;
-   typedef unique_ptr<sink> sinkptr;
-
-   struct ManySinks {
-      // vector< pair<sinkptr, activeptr>>  --- handler can be 
-      //         shared_ptr-pair?? Overkill???
-      map<sinkptr, activeptr> _sinks;
-
-      void addSink(unique_ptr<sink> sink) {
-         _sinks[std::move(sink)] = Active::createActive();
+      
+   public:
+      sink_handler(shared_ptr<XSink> s, shared_ptr<shared_queue<Callback>> q)
+              : sink(s), msgQ(q){}
+              
+      template<typename Call, typename... Args>
+      //std::future<typename std::result_of<Call(Args...)>::type> 
+      auto sink_task(Call call, Args... args) -> decltype(bind(call, sink.get(), args...)) { // YES
+         
+         decltype(bind(call, sink.get(), args...)) callback = bind(call, sink.get(), args...);    
+         auto f1 = async(callback);
+         f1.wait();
+         
+         typedef decltype((sink->addTextBeforePrint(args...))) yalla; // funkar
+          typedef typename std::result_of<decltype(callback)()>::type result_type0; // funckar
+         //todo kan jag skriva om så at det framgår i argumenten att det är en funktionspekare?
+         //se även: http://stackoverflow.com/questions/2689709/difference-between-stdresult-of-and-decltype?rq=1
+         
+            
+            
+          // fnkar inte: typedef typename std::result_of<Call(Args...)>::type yalla;
+         //decltype(sink.get()->(typename call)(args...)) yalla;
+         //typedef typename std::remove_pointer<Call>::type yalla2;
+         //typedef typename function<typename std::remove_pointer<Call>::type>::result_type yalla4;
+  //       typedef decltype(yalla2(args...)) yalla3; 
+         //typedef typename result_of<decltype(&asd::f)(asd)>::type result_mem;
+         
+//         template <typename F, typename Arg>
+//typename std::result_of<F(Arg)>::type
+//invoke(F f, Arg a)
+//{
+//    return f(a);
+//}
+//         
+         
+         
+         typedef typename std::result_of<decltype(callback)()>::type result_type1;
+         //typedef typename function<sink:: typename Call>::result_type aType;
+         
+         //typedef typename std::result_of<typename Call(Args...)>::type result_type2;
+         
+         //typedef typename std::result_of<Call(Args...)>::type result_type2;
+         
+         //return f1;
+         //return spawn_sink_task(call, args...);
       }
-
+   };
+   
+   typedef unique_ptr<Active> activeptr;
+   typedef shared_ptr<sink> sinkptr;
+   typedef shared_ptr<sink_handler<sink>>  sink_handler_ptr;
+   
+   
+   struct ManySinks {
+      map<sinkptr, activeptr> _sinks;
+      
+     sink_handler_ptr      addSink(unique_ptr<sink> s) {
+         auto x = s.release(); sinkptr xptr; xptr.reset(x); 
+         _sinks[xptr] = Active::createActive();  
+         auto& a = _sinks[xptr];
+         sink_handler_ptr handler = make_shared<sink_handler<sink>>(xptr, a->message_queue());
+         return handler;
+      }
+      
       void print(std::string text) {
          for (auto& pair : _sinks) {
-            auto& ptr = pair.first;
-            auto& active = pair.second;
+            auto& ptr = pair.first; auto& active = pair.second;
             active->send(bind(&sink::print, ptr.get(), text));
          }
       }
@@ -190,12 +185,24 @@ int main() {
    call3();
    
    ManySinks sinks;
-   sinks.addSink(unique_ptr<sink>(new sink));
-   auto s2 = unique_ptr<sink2>(new sink2);
-   s2->addTextBeforePrint("---");
-   s2->addTextAfterPrint("....");
-   sinks.addSink(move(s2));
+   auto s1_handler = sinks.addSink(unique_ptr<sink>(new sink));
+   s1_handler->sink_task(&sink::addTextBeforePrint, string("---"));
+   //future<void> done1 = s1_handler->sink_task(&sink::addTextBeforePrint, string("---"));
+   //future<void> done1 = s1_handler->spawn_sink_task(&somePrint, string("---"));
    sinks.print("Hello");
+   
+//     ManySinks sinks;
+//   sinks.addSink(unique_ptr<sink>(new sink));
+//   auto s2 = unique_ptr<sink2>(new sink2);
+//   s2->addTextBeforePrint("---");
+//   s2->addTextAfterPrint("....");
+//   sinks.addSink(move(s2));
+//   sinks.print("Hello");
+   
+   
+   
+   
+   
    
   // What I want to do is this
   // Interface:
