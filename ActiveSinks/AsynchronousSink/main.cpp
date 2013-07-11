@@ -75,81 +75,93 @@ namespace {
  
    
    
+    template<typename TCheck, typename TFunction, typename... TArgs>
+    struct async_sfinae_helper
+    {
+      typedef std::future<typename std::result_of<TFunction(TArgs...)>::type> type;
+    };
 
+     //typename async_sfinae_helper<typename std::decay<Call>::type, Call, Args...>::type
+     template<typename TClass, typename Call, typename... Args>
+     auto async2(TClass* object, Call call, Args... args)-> decltype(async(bind(call, object, args...)))
+      {
+         auto callback = bind(call, object, args...); 
+         auto f1 = async(callback);
+         //f1.wait();
+         return f1;
+      } 
+     //std::future<typename std::result_of<Func()>::type> spawn_task(Func func, kjellkod::Active* worker)
 
-   
-   
+     
+           
+     
+//       template<typename Call, typename... Args>
+//      //std::future<typename std::result_of<Call(Args...)>::type> 
+//      auto sink_task(Call call, Args... args) -> decltype(bind(call, sink.get(), args...)) { // YES
+//         decltype(bind(call, sink.get(), args...)) callback = bind(call, sink.get(), args...);    
+//         auto f1 = async(callback);
+//         //return std::move(f1);
+//          typedef decltype((sink->addTextBeforePrint(args...))) yalla; // funkar
+//          typedef typename std::result_of<decltype(callback)()>::type result_type0; // funckar
+//      }
+//           
+           
+     
    template<typename XSink>
    struct sink_handler{
-   private:
+   //private:
       shared_ptr<XSink> sink;
       shared_ptr<shared_queue<Callback>> msgQ;
 
    public:
+            
+      sink_handler(shared_ptr<XSink> s, shared_ptr<shared_queue<Callback>> q) : sink(s), msgQ(q){}
+              
+              
       template<typename Call, typename... Args>
       //std::future<typename std::result_of<Call(Args...)>::type> 
       void spawn_sink_task(Call call, Args&&... args) {
       typedef typename std::result_of < Call(Args...)>::type result_type;
       typedef std::packaged_task < result_type() > task_type;
-      
+    
       //auto callback = bind(call, sink.get(), args...);
       auto callback2 = bind(&somePrint, args...);
       auto f1 = async(callback2);
       f1.wait();
       //return std::move(f1);
-      
 //        auto callback = bind(call, sink.get(), args...);
 //        task_type task(std::move(callback));
-      
 //      auto future_result = task.get_future();
 //      msgQ->push(PretendToBeCopyable<task_type>(std::move(task)));
 //      return future_result;
    }
       
-   public:
-      sink_handler(shared_ptr<XSink> s, shared_ptr<shared_queue<Callback>> q)
-              : sink(s), msgQ(q){}
+
               
-      template<typename Call, typename... Args>
-      //std::future<typename std::result_of<Call(Args...)>::type> 
-      auto sink_task(Call call, Args... args) -> decltype(bind(call, sink.get(), args...)) { // YES
-         
-         decltype(bind(call, sink.get(), args...)) callback = bind(call, sink.get(), args...);    
-         auto f1 = async(callback);
-         f1.wait();
-         
-         typedef decltype((sink->addTextBeforePrint(args...))) yalla; // funkar
-          typedef typename std::result_of<decltype(callback)()>::type result_type0; // funckar
+                 
          //todo kan jag skriva om så at det framgår i argumenten att det är en funktionspekare?
          //se även: http://stackoverflow.com/questions/2689709/difference-between-stdresult-of-and-decltype?rq=1
-         
-            
-            
           // fnkar inte: typedef typename std::result_of<Call(Args...)>::type yalla;
          //decltype(sink.get()->(typename call)(args...)) yalla;
          //typedef typename std::remove_pointer<Call>::type yalla2;
          //typedef typename function<typename std::remove_pointer<Call>::type>::result_type yalla4;
   //       typedef decltype(yalla2(args...)) yalla3; 
          //typedef typename result_of<decltype(&asd::f)(asd)>::type result_mem;
-         
-//         template <typename F, typename Arg>
-//typename std::result_of<F(Arg)>::type
-//invoke(F f, Arg a)
-//{
-//    return f(a);
-//}
-//         
-         
-         
-         typedef typename std::result_of<decltype(callback)()>::type result_type1;
+         //typedef typename std::result_of<decltype(callback)()>::type result_type1;
          //typedef typename function<sink:: typename Call>::result_type aType;
-         
          //typedef typename std::result_of<typename Call(Args...)>::type result_type2;
-         
          //typedef typename std::result_of<Call(Args...)>::type result_type2;
-         
-         //return f1;
-         //return spawn_sink_task(call, args...);
+         //return spawn_sink_task(call, args...);        
+         //return f1
+              
+      template<typename Call, typename... Args>
+      //std::future<typename std::result_of<Call(Args...)>::type> 
+      auto sink_task(Call call, Args... args) -> decltype(bind(call, sink.get(), args...)) { // YES
+         decltype(bind(call, sink.get(), args...)) callback = bind(call, sink.get(), args...);    
+         auto f1 = async(callback);
+         //return std::move(f1);
+          typedef decltype((sink->addTextBeforePrint(args...))) yalla; // funkar
+          typedef typename std::result_of<decltype(callback)()>::type result_type0; // funckar
       }
    };
    
@@ -186,9 +198,12 @@ int main() {
    
    ManySinks sinks;
    auto s1_handler = sinks.addSink(unique_ptr<sink>(new sink));
-   s1_handler->sink_task(&sink::addTextBeforePrint, string("---"));
+    //auto done1 = async2(&sink::addTextBeforePrint, string("---"));
+   auto done1 = async2(s1_handler->sink.get(), &sink::addTextBeforePrint, string("---"));
+   done1.wait();
+   //auto done1 = s1_handler->sink_task(&sink::addTextBeforePrint, string("---"));
    //future<void> done1 = s1_handler->sink_task(&sink::addTextBeforePrint, string("---"));
-   //future<void> done1 = s1_handler->spawn_sink_task(&somePrint, string("---"));
+   //s1_handler->spawn_sink_task(&sink::addTextBeforePrint, string("---"));
    sinks.print("Hello");
    
 //     ManySinks sinks;
