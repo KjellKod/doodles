@@ -117,29 +117,7 @@ namespace {
             
       sink_handler(shared_ptr<XSink> s, shared_ptr<shared_queue<Callback>> q) : sink(s), msgQ(q){}
               
-              
-      template<typename Call, typename... Args>
-      //std::future<typename std::result_of<Call(Args...)>::type> 
-      void spawn_sink_task(Call call, Args&&... args) {
-      typedef typename std::result_of < Call(Args...)>::type result_type;
-      typedef std::packaged_task < result_type() > task_type;
-    
-      //auto callback = bind(call, sink.get(), args...);
-      auto callback2 = bind(&somePrint, args...);
-      auto f1 = async(callback2);
-      f1.wait();
-      //return std::move(f1);
-//        auto callback = bind(call, sink.get(), args...);
-//        task_type task(std::move(callback));
-//      auto future_result = task.get_future();
-//      msgQ->push(PretendToBeCopyable<task_type>(std::move(task)));
-//      return future_result;
-   }
-      
-
-              
-                 
-         //todo kan jag skriva om så at det framgår i argumenten att det är en funktionspekare?
+               //todo kan jag skriva om så at det framgår i argumenten att det är en funktionspekare?
          //se även: http://stackoverflow.com/questions/2689709/difference-between-stdresult-of-and-decltype?rq=1
           // fnkar inte: typedef typename std::result_of<Call(Args...)>::type yalla;
          //decltype(sink.get()->(typename call)(args...)) yalla;
@@ -153,15 +131,49 @@ namespace {
          //typedef typename std::result_of<Call(Args...)>::type result_type2;
          //return spawn_sink_task(call, args...);        
          //return f1
-              
-      template<typename Call, typename... Args>
+      
+      
+//      template<typename Call, typename... Args>
+//      //std::future<typename std::result_of<Call(Args...)>::type> 
+//      void spawn_sink_task(Call call, Args&&... args) {
+//      typedef typename std::result_of < Call(Args...)>::type result_type;
+//      typedef std::packaged_task < result_type() > task_type;
+//    
+//      //auto callback = bind(call, sink.get(), args...);
+//      auto callback2 = bind(&somePrint, args...);
+//      auto f1 = async(callback2);
+//      f1.wait();
+      //return std::move(f1);
+//        auto callback = bind(call, sink.get(), args...);
+//        task_type task(std::move(callback));
+//      auto future_result = task.get_future();
+//      msgQ->push(PretendToBeCopyable<task_type>(std::move(task)));
+//      return future_result;
+//                typedef decltype((sink->addTextBeforePrint(args...))) yalla; // funkar
+//          typedef typename std::result_of<decltype(callback)()>::type result_type0; // funckar
+
+  // }
+           template<typename Call, typename... Args>
       //std::future<typename std::result_of<Call(Args...)>::type> 
-      auto sink_task(Call call, Args... args) -> decltype(bind(call, sink.get(), args...)) { // YES
-         decltype(bind(call, sink.get(), args...)) callback = bind(call, sink.get(), args...);    
-         auto f1 = async(callback);
-         //return std::move(f1);
-          typedef decltype((sink->addTextBeforePrint(args...))) yalla; // funkar
-          typedef typename std::result_of<decltype(callback)()>::type result_type0; // funckar
+      void spawn_sink_task(Call call, Args&&... args) {
+      typedef typename std::result_of < Call(Args...)>::type result_type;
+      typedef std::packaged_task < result_type() > task_type;
+    
+      //auto callback = bind(call, sink.get(), args...);
+      auto callback2 = bind(&somePrint, args...);
+      auto f1 = async(callback2);
+      f1.wait();
+      }
+      
+      template<typename Call, typename... Args>
+      auto sink_task(Call call, Args... args) -> decltype(async(bind(call, sink.get(), args...))) {
+         auto callback = bind(call, sink.get(), args...); 
+         typedef decltype(callback) result_type;
+         typedef std::packaged_task<result_type()> task_type;
+         task_type task(std::move(callback));
+         std::future<result_type> result = task.get_future();
+         msgQ->push(PretendToBeCopyable<task_type>(std::move(task))); 
+         return result;
       }
    };
    
@@ -171,9 +183,9 @@ namespace {
    
    
    struct ManySinks {
-      map<sinkptr, activeptr> _sinks;
+      map<sinkptr, activeptr> _sinks; // this should be in the workerpimpl which also has an activeptr
       
-     sink_handler_ptr      addSink(unique_ptr<sink> s) {
+     sink_handler_ptr addSink(unique_ptr<sink> s) {
          auto x = s.release(); sinkptr xptr; xptr.reset(x); 
          _sinks[xptr] = Active::createActive();  
          auto& a = _sinks[xptr];
@@ -217,7 +229,17 @@ int main() {
    
    
    
-   
+   Next step. Take another main (keep this file)
+   And make it cleaner. OR!!! Even better. Just fork
+   G2log and put it in the right place. Important. It SHOULD be forked since
+   I want to work with this for quite some time. I can merge it with g2log later
+           
+           Question: Is it OK that the sink_handler goes straigt to its 
+           internal msgQ in front of any main msgQ enqueued messages?
+              
+              If we want it in truly fifo order how would we solve it then?
+                 I think it is FINE that it will happen asynchronously and not
+           in FIFO order to the log messages.
    
   // What I want to do is this
   // Interface:
