@@ -40,22 +40,20 @@ class Active {
    atomic<bool> go;
    std::thread thd;
 
-   void flagToExit() {go = false;}
-
    void internal_run() {
-      while (go) {
-         Callback call;
+      Callback call;
+      while (go) { 
          q->wait_and_pop(call);
          call();
       }
    }
+   
 public:
 
    Active(): q(make_shared<shared_queue<Callback>>()){go = true;}
 
    ~Active() {
-      function<void() > quit_token = std::bind(&Active::flagToExit, this);
-      q->push(quit_token);
+      q->push([this]{go=false;});
       thd.join();
    }
 
