@@ -194,8 +194,11 @@ int main() {
   ManySinks sinks;
   auto s1_handler = sinks.addSink(unique_ptr<sink>(new sink));
   //auto done1 = async2(s1_handler->sink.get(), &sink::addTextBeforePrint, string("---"));
-  auto done2 = s1_handler->async2(&sink::addTextBeforePrint, string("---"));
+  auto done1 = s1_handler->async2(&sink::addTextBeforePrint, string("---"));
+  auto done2 = s1_handler->async2(&sink::addTextBeforePrint, string("***"));
+  done1.wait();
   done2.wait();
+  
   sinks.print("Hello");
 
 
