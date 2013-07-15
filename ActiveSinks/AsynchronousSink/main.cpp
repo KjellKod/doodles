@@ -186,6 +186,7 @@ std::future<typename std::result_of<Func()>::type> spawn_taskX(Func func)
 
 } // namespace
 
+#include "herb_test.h"
 int main() {
   call1();
   call2();
@@ -201,6 +202,8 @@ int main() {
   
   sinks.print("Hello");
 
+  
+  herb::main2();
 
 
   /*
