@@ -13,71 +13,15 @@
 #include <mutex>
 #include <exception>
 #include <condition_variable>
-
-namespace herb {
-  typedef std::function<void() > Callback;
-
-  /** Multiple producer, multiple consumer thread safe queue
-   * Since 'return by reference' is used this queue won't throw */
-  template<typename T>
-  class shared_queue {
-    mutable std::queue<T> queue_;
-    mutable std::mutex m_;
-    mutable std::condition_variable data_cond_;
-
-    shared_queue& operator=(const shared_queue&) = delete;
-    shared_queue(const shared_queue& other) = delete;
-
-  public:
-
-    shared_queue() {
-    }
-
-    void push(T item) const {
-      std::lock_guard<std::mutex> lock(m_);
-      queue_.push(item);
-      data_cond_.notify_one();
-    }
-
-    /// \return immediately, with true if successful retrieval
-
-    bool try_and_pop(T& popped_item) const {
-      std::lock_guard<std::mutex> lock(m_);
-      if (queue_.empty()) {
-        return false;
-      }
-      popped_item = queue_.front();
-      queue_.pop();
-      return true;
-    }
-
-    /// Try to retrieve, if no items, wait till an item is available and try again
-
-    void wait_and_pop(T& popped_item) const {
-      std::unique_lock<std::mutex> lock(m_); // note: unique_lock is needed for std::condition_variable::wait
-      while (queue_.empty()) { //                       The 'while' loop below is equal to
-        data_cond_.wait(lock); //data_cond_.wait(lock, [](bool result){return !queue_.empty();});
-      }
-      popped_item = queue_.front();
-      queue_.pop();
-    }
-
-    bool empty() const {
-      std::lock_guard<std::mutex> lock(m_);
-      return queue_.empty();
-    }
-
-    unsigned size() const {
-      std::lock_guard<std::mutex> lock(m_);
-      return queue_.size();
-    }
-  };
-
-
+#include "shared_queue.h"
 #include <thread>
 #include <iostream>
 #include <ostream>
 #include <memory>
+
+
+namespace herb {
+  typedef std::function<void() > Callback;
 
   template<typename Fut, typename F, typename T>
   void set_value(std::promise<Fut>& p, F& f, T&t) {
@@ -109,10 +53,11 @@ namespace herb {
     : t(t_), thd([ = ]{Callback call; while (!done) {q.wait_and_pop(call); call();}}) 
     {}
 
-    ~concurrent() { q.push([ = ]{done = true;}); thd.join();
-    }
+    ~concurrent() { q.push([ = ]{done = true;}); thd.join();    }
 
-
+    template<typename F>
+    void fireAndForget(F f) { q.push([=]{f(t);}); }
+    
     template<typename F>
     auto operator()(F f) const -> std::future<decltype(f(t))> {
       auto p = std::make_shared < std::promise < decltype(f(t)) >> ();
@@ -126,13 +71,17 @@ namespace herb {
     }
   };
 
+  
+  concurrent<ostream&> ccout{cout};
+  std::future<void> doCall(string str) {  
+    auto call = [=](ostream& oss){ oss << 1234 << "1234" << str << endl; };
+    return ccout(call);
+  }
+  
   void main2() {
     using namespace std;
-    concurrent<ostream&> ccout{cout};
     string yalla = "yalla";
-    auto call = [=](ostream& oss){ oss << 1234 << "1234" << yalla << endl; };
-    auto res_0 = ccout(call);
-    
+    auto res_0 = doCall(yalla);
     auto res_1 = ccout([ = ](ostream & oss){oss << 1234 << "1234" << yalla << endl;});
     res_1.wait();
     res_0.wait();
