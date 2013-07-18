@@ -86,24 +86,25 @@ std::future<typename std::result_of<Func()>::type> spawn_taskX(Func func)
 
 #include "herb_test.h"
 int main() {
-  call1();
-  call2();
-  call3();
-
-  Worker sinks;
-  auto s1_handler = sinks.addSink(unique_ptr<sink1>(new sink1));
-  //auto done1 = async2(s1_handler->sink.get(), &sink::addTextBeforePrint, string("---"));
-  auto done1 = s1_handler->async2(&sink1::addTextBeforePrint, string("---"));
-  auto done2 = s1_handler->async2(&sink1::addTextBeforePrint, string("***"));
-  done1.wait();
-  done2.wait();
-  
-  sinks.print("Hello");
-
-  
-  herb::main2();
+//  call1();
+//  call2();
+//  call3();
+//
+//  Worker sinks;
+//  auto s1_handler = sinks.addSink(unique_ptr<sink1>(new sink1));
+//  //auto done1 = async2(s1_handler->sink.get(), &sink::addTextBeforePrint, string("---"));
+//  auto done1 = s1_handler->async2(&sink1::addTextBeforePrint, string("---"));
+//  auto done2 = s1_handler->async2(&sink1::addTextBeforePrint, string("***"));
+//  done1.wait();
+//  done2.wait();
+//  
+//  sinks.print("Hello");
+//
+//  
+//  herb::main2();
   
   SinkWrapper::test();
+  std::cout << "all tests finished" << std::endl;
   return 0;
 }
 
