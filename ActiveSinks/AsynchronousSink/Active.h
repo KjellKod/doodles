@@ -14,6 +14,8 @@
 #include <memory>
 #include "shared_queue.h"
 
+
+#include <iostream>
 typedef std::function<void() > Callback;
 using namespace std;
 
@@ -48,13 +50,15 @@ class Active {
       }
    }
    
+   void doExit() { go=false; std::cout << "push-go=false: will now exit" << std::endl; }
+ 
 public:
 
    Active(): q(make_shared<shared_queue<Callback>>()){go = true;}
 
-   ~Active() {
-      q->push([this]{go=false;});
-      thd.join();
+   ~Active() { send(std::bind(&Active::doExit, this));
+               thd.join();
+      std::cout << "Active has exited: queue size was:"  << q->size() << std::endl;
    }
 
    // Add asynchronously a work-message to queue

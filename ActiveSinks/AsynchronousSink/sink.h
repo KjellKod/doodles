@@ -30,6 +30,7 @@
       std::stringstream ss;
       ss << text << " " << post << " : " << std::this_thread::get_id() << std::endl;
       std::cout << ss.str();
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
   };
 
