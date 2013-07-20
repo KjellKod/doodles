@@ -129,7 +129,7 @@ namespace SinkWrapper {
 //        s->send(std::to_string(i)); //if the destructor hits before 
 //
 //
-//    }
+//    } 
 //    std::cout << "added all jobs\n\n\n\n\n" << std::endl;
 //
 //    //    auto handle = createHandle(wrap1);
@@ -142,24 +142,13 @@ namespace SinkWrapper {
     worker.save("Hello World!");
     auto handler_1 = worker.addSink(std2::make_unique<sink1>(), &sink1::print);
     worker.save("Hello again World!");
+    auto handler_2 = worker.addSink(std2::make_unique<sink2>(), &sink2::save);
+    worker.save("Hola Mundo, otra vez");
     
     
-//      auto ptr1 = std::make_shared<sink1>(); // the real object wo will do the work
-//      auto wrap1 = std::make_shared<Sink1>(ptr1, &sink1::print);
-//
-//      auto ptr2 = std::make_shared<sink2>();
-//      auto wrap2 = std::make_shared<Sink2>(ptr2, &sink2::save);
-//
-//      container.push_back(wrap1);
-//      container.push_back(wrap2); // Fake -- send() call at the g2logworker. Each sink in the queue gets a message
-//      std::string msg = "XYZ";
-//
-//
-//
-//    std::vector<int> vec(300);
-//    size_t count = 0;
-//    for (auto i: vec)
-//      test2(++count, container);
+    // Now call the handlers and give them specific commands
+    // These commands will be sent STRAIGHT to the Sink's asynchronous dispatcher
+    //handler_1->
   }
 
 } // sinkwrapper
