@@ -16,6 +16,7 @@
   struct sink1 {
     std::string pre;
     void addTextBeforePrint(std::string text) {  pre.append(text); }
+    
     void print(const std::string& text) { 
       std::stringstream ss;
       ss << pre << " " << text << " : " << std::this_thread::get_id() << std::endl;

@@ -19,43 +19,37 @@
 #include <iostream>
 #include <ostream>
 #include <memory>
+#include "unique_memory.h"
+#include "g2future.h"
 #include "sink.h"
 
 namespace SinkWrapper {
-
-  typedef std::function<void() > Callback;
-  typedef std::string LogMessage;
-  typedef std::function<void(LogMessage) > MessageCall;
-
-
+  typedef std::function<void() > AsyncSinkCall;
+  typedef std::string LogEntry;
+  typedef std::function<void(LogEntry) > AsyncMessageCall;
   /// The wrapper represents any Sink<T> and can therefore be stored as a pointer
   /// in a standard container
-
   struct SinkWrapper {
-
-    virtual ~SinkWrapper() {
-    }
-    virtual void send(LogMessage msg) = 0;
-    virtual void send(Callback msg) = 0; // honestly this one does not need to be abstract
+    virtual ~SinkWrapper() {}
+    virtual void send(LogEntry msg) = 0;
+    virtual void send(AsyncSinkCall call) = 0; // honestly this one does not need to be abstract?
   };
 
 
   /// The Sink has an active object and owns the real object that will do the bg work
-  ///
-
   template<class T>
   class Sink : public SinkWrapper {
     std::unique_ptr<Active> _bg;
     std::shared_ptr<T> _t; // behövs både _t och -sink-stoage???
-    MessageCall _log_call; //the default call from worker->send(msg)   //Callback _sink_storage_only; // behövs både _t och -sink-stoage???
+    AsyncMessageCall _log_call; //the default call from worker->send(msg)
+    //Callback _sink_storage_only; // not needed since we save T
   public:
-
     template<typename Call>
     Sink(std::shared_ptr<T> t, Call call)
-    : SinkWrapper {
-    }
-, _t(t), _bg(Active::createActive()),
-    _log_call(std::bind(call, _t.get(), std::placeholders::_1)) /*_sink_storage_only([] {})*/ {
+    : SinkWrapper {},
+            _t{t},
+            _bg(Active::createActive()),    
+            _log_call(std::bind(call, _t.get(), std::placeholders::_1)) /*_sink_storage_only([] {})*/ {
     }
 
     virtual ~Sink() {
@@ -63,81 +57,109 @@ namespace SinkWrapper {
       std::cout << "Sink<T> exiting" << std::endl;
     }
 
-    std::shared_ptr<T> ptr() {
-      return _t.get();
-    }
+    std::shared_ptr<T> ptr() { return _t.get(); }
 
-    void send(LogMessage msg) override {
-      _bg->send([ = ]{_log_call(msg);});
-    }
-
-    void send(Callback msg) {
-      _bg->send(msg);
-    } // any type of call
+    
+    void send(LogEntry msg) override {  _bg->send([ = ]{_log_call(msg);});   }
+    void send(AsyncSinkCall msg) { _bg->send(msg);  } // any type of call
   };
 
+  //Sinkhandle is the client's access point to the specific sink instance
+  // Only through the Sinkhandle can, and should, the sink specific API be called
   template<class T>
   class SinkHandle {
     std::weak_ptr<T> _handle;
   public:
 
-    SinkHandle(std::shared_ptr<T> t) : _handle(t) {
-    }
-
-    ~SinkHandle() {
-    }
+    SinkHandle(std::shared_ptr<T> t) : _handle(t) { }
+    ~SinkHandle() { }
   };
+  
+  
 
-
-
+  typedef std::shared_ptr<SinkWrapper> SinkWrapperPtr;
+  
+  class Worker {
+     std::vector<SinkWrapperPtr> _container; // should be hidden in a pimple with a bg active object
+     std::unique_ptr<Active> _bg;
+     
+     void bgSave(LogEntry msg) {
+       for(auto& sink: _container) {
+         sink->send(msg);
+       }
+     }
+     
+  public:
+    Worker() :_bg{Active::createActive()}{}
+    ~Worker(){  _bg->send([this]{_container.clear();});  }
+    void save(LogEntry msg) { _bg->send([this, msg]{bgSave(msg);});  } // will this be copied?
+            //this is guaranteed to work std::bind(&Worker::bgSave, this, msg));   }
+    
+  
+  template<typename T, typename DefaultLogCall>
+  std::unique_ptr<SinkHandle<T>> addSink(std::unique_ptr<T> unique, DefaultLogCall call) {
+    auto shared = std::shared_ptr<T>(unique.release());
+    auto sink = std::make_shared<Sink<T>>(shared, call);
+    auto add_sink_call = [this, sink]{_container.push_back(sink); };
+    auto wait_result = g2::spawn_task(add_sink_call, _bg.get());
+    wait_result.wait();
+    
+    auto handle = std2::make_unique<SinkHandle<T>>(shared);    
+    return handle;
+  }
+  };
+  
+  
   /// The createHandle should reside nside the Worker and probably be called
   /// addSink instead. Here we get a Sink object and creates a handle for it that we store
   /// a weakptr to the Sink inside the SinkHandle object
 
-  template<typename TSink>
-  std::unique_ptr<SinkHandle<TSink >> createHandle(std::shared_ptr<TSink> ptr) {
-    auto weak = std::unique_ptr < SinkHandle < TSink >> (new SinkHandle<TSink>(ptr));
-    return weak;
-  }
+//  template<typename TSink>
+//  std::unique_ptr<SinkHandle<TSink >> createHandle(std::shared_ptr<TSink> ptr) {
+//    auto weak = std::unique_ptr < SinkHandle < TSink >> (new SinkHandle<TSink>(ptr));
+//    return weak;
+//  }
 
-
-
-  typedef std::shared_ptr<SinkWrapper> SinkPtr;
-  typedef Sink<sink1> Sink1;
-  typedef Sink<sink2> Sink2;
-
-  void test2(int i, std::vector<SinkPtr>& container) {
-    {
-      for (auto& s : container)
-        s->send(std::to_string(i)); //if the destructor hits before 
-
-
-    }
-    std::cout << "added all jobs\n\n\n\n\n" << std::endl;
-
-    //    auto handle = createHandle(wrap1);
-    //    auto future_result = handle->async2(&sink1::addTextBeforePrint, "###");
-
-  }
+//  typedef Sink<sink1> Sink1;
+//  typedef Sink<sink2> Sink2;
+//
+//  void test2(int i, std::vector<SinkPtr>& container) {
+//    {
+//      for (auto& s : container)
+//        s->send(std::to_string(i)); //if the destructor hits before 
+//
+//
+//    }
+//    std::cout << "added all jobs\n\n\n\n\n" << std::endl;
+//
+//    //    auto handle = createHandle(wrap1);
+//    //    auto future_result = handle->async2(&sink1::addTextBeforePrint, "###");
+//
+//  }
 
   void test() {
-      std::vector<SinkPtr> container;
-      auto ptr1 = std::make_shared<sink1>(); // the real object wo will do the work
-      auto wrap1 = std::make_shared<Sink1>(ptr1, &sink1::print);
-
-      auto ptr2 = std::make_shared<sink2>();
-      auto wrap2 = std::make_shared<Sink2>(ptr2, &sink2::save);
-
-      container.push_back(wrap1);
-      container.push_back(wrap2); // Fake -- send() call at the g2logworker. Each sink in the queue gets a message
-      std::string msg = "XYZ";
-
-
-
-    std::vector<int> vec(300);
-    size_t count = 0;
-    for (auto i: vec)
-      test2(++count, container);
+    Worker worker;
+    worker.save("Hello World!");
+    auto handler_1 = worker.addSink(std2::make_unique<sink1>(), &sink1::print);
+    worker.save("Hello again World!");
+    
+    
+//      auto ptr1 = std::make_shared<sink1>(); // the real object wo will do the work
+//      auto wrap1 = std::make_shared<Sink1>(ptr1, &sink1::print);
+//
+//      auto ptr2 = std::make_shared<sink2>();
+//      auto wrap2 = std::make_shared<Sink2>(ptr2, &sink2::save);
+//
+//      container.push_back(wrap1);
+//      container.push_back(wrap2); // Fake -- send() call at the g2logworker. Each sink in the queue gets a message
+//      std::string msg = "XYZ";
+//
+//
+//
+//    std::vector<int> vec(300);
+//    size_t count = 0;
+//    for (auto i: vec)
+//      test2(++count, container);
   }
 
 } // sinkwrapper
