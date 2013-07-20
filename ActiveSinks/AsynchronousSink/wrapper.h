@@ -40,8 +40,8 @@ namespace SinkWrapper {
   template<class T>
   class Sink : public SinkWrapper {
     std::unique_ptr<Active> _bg;
-    std::shared_ptr<T> _t; // behövs både _t och -sink-stoage???
-    AsyncMessageCall _log_call; //the default call from worker->send(msg)
+  public:std::shared_ptr<T> _t; // behövs både _t och -sink-stoage???
+  private: AsyncMessageCall _log_call; //the default call from worker->send(msg)
     //Callback _sink_storage_only; // not needed since we save T
   public:
     template<typename Call>
@@ -56,24 +56,146 @@ namespace SinkWrapper {
       _bg.reset();
       std::cout << "Sink<T> exiting" << std::endl;
     }
-
-    std::shared_ptr<T> ptr() { return _t.get(); }
-
     
     void send(LogEntry msg) override {  _bg->send([ = ]{_log_call(msg);});   }
-    void send(AsyncSinkCall msg) { _bg->send(msg);  } // any type of call
+    void send(AsyncSinkCall call) { _bg->send(call);  } // any type of call
+    
+    
+    //    template<typename Call, typename... Args>
+    //    auto async2(Call call, Args... args)->decltype(async(bind(call, sink.get(), args...))) {
+  //      return spawn_taskX(std::bind(call, sink.get(), args...));
+
+    
+    template<typename Call, typename... Args>
+    void sendX(Call call, Args... args){
+      //  ->std::future<decltype(bind(call, _t.get, args..))> 
+      auto bg_call = std::bind(call, _t.get(), args...);
+      typedef decltype(bg_call()) ResultType;
+      
+      std::future<ResultType> result00 = g2::spawn_task(bg_call, _bg.get()); 
+      std::future<decltype(bg_call())> result0 = g2::spawn_task(bg_call, _bg.get());  
+      auto result = g2::spawn_task(bg_call, _bg.get());  
+      result.wait(); 
+    } // any type of call
+    
+     template<typename Call, typename... Args>
+    auto sendXX(Call call, Args... args)->decltype(async(bind(call, _t.get(), args...))){
+      return g2::spawn_task(std::bind(call, _t.get(), args...), _bg.get());
+      } 
   };
 
+ //async(Call call, Args... args)->decltype(async(bind(call, ptr().get(), args...))) {
+//      template<typename Call, typename... Args>
+//    auto async2(Call call, Args... args)->decltype(async(bind.(call, sink.get(), args...))) {
+//    return spawn_taskX(std::bind(call, sink.get(), args...));
+//    }
+  
   //Sinkhandle is the client's access point to the specific sink instance
   // Only through the Sinkhandle can, and should, the sink specific API be called
   template<class T>
   class SinkHandle {
     std::weak_ptr<T> _handle;
+    std::weak_ptr<Sink<T>> _sink;
+    
   public:
-
-    SinkHandle(std::shared_ptr<T> t) : _handle(t) { }
+    SinkHandle(std::shared_ptr<T> t, std::shared_ptr<Sink<T>> sink) : _handle(t), _sink(sink) { }
     ~SinkHandle() { }
+    
+    
+    template<typename Call, typename... Args>
+    auto call(Call call, Args... args) -> decltype(_sink.lock()->sendXX(call, args...))
+    {
+      //std::shared_ptr<T> ptr(_handle); // might throw if _handle is empty
+      std::shared_ptr<Sink<T>> sink(_sink); // might throw if sink is empty
+      auto X = sink->sendXX(call, args...); 
+      //auto async_call = std::bind(call, ptr.get(), args...); // std::forward?
+      //auto result = g2::spawn_task(async_call, )
+
+      //      typedef decltype(async(bind(call, *(_handle.lock()), args...))) ReturnType;
+//      
+//      std::shared_ptr<T> realptr(_handle);
+//      return spawn_taskX(realptr,   std::bind(call, realptr.get(), args...));
+//
+//      try
+//      {
+//        std::shared_ptr<T> realptr(_handle);
+//        return spawn_taskX(realptr,   std::bind(call, realptr.get(), args...));
+//      }
+//      catch(const std::bad_weak_ptr& e) 
+//      { // re-throw inside the expected futures
+//        typedef std::promise<ReturnType> PromiseType;
+//        auto promise = make_shared<PromiseType>();
+//      }
+    }
+
+    
   };
+  
+  
+  
+//    template<typename Call, typename... Args>
+//    auto async(Call call, Args... args)->decltype(async(bind(call, ptr().get(), args...))) {
+//      typedef decltype(async(bind(call, _t.get(), args...))) ReturnType;
+//      return spawn_taskX(std::bind(call, ptr().get(), args...));
+//    }
+
+  
+  
+
+//    template<typename Call, typename... Args>
+//    auto async2(Call call, Args... args)->decltype(_handle.lock()->async(call, args...)) {
+//      std::shared_ptr<T> realptr(_handle);
+//      return realptr->async(call, args...);
+//    }
+//    template<typename Call, typename... Args>
+//    auto async2(Call call, Args... args)->decltype(async(bind(call, *(_handle.lock()), args...))) 
+//    {
+//      typedef decltype(async(bind(call, *(_handle.lock()), args...))) ReturnType;
+//      
+//      std::shared_ptr<T> realptr(_handle);
+//      return spawn_taskX(realptr,   std::bind(call, realptr.get(), args...));
+
+//      try
+//      {
+//        std::shared_ptr<T> realptr(_handle);
+//        return spawn_taskX(realptr,   std::bind(call, realptr.get(), args...));
+//      }
+//      catch(const std::bad_weak_ptr& e) 
+//      { // re-throw inside the expected futures
+//        typedef std::promise<ReturnType> PromiseType;
+//        auto promise = make_shared<PromiseType>();
+//      }
+//    }
+
+  
+//    template <typename Func>
+//    std::future<typename std::result_of<Func()>::type> spawn_taskX(Func func) {
+//      typedef typename std::result_of < Func()>::type result_type;
+//      typedef std::packaged_task < result_type() > task_type;
+//      task_type task(std::move(func));
+//      std::future<result_type> result = task.get_future();
+//      send(PretendToBeCopyable<task_type>(std::move(task)));
+//      return std::move(result);
+//    }
+//
+//
+
+
+  
+  //template <typename Func>
+//std::future<typename std::result_of<Func()>::type> spawn_taskX(std::shared_ptr<T> sink, Func func)
+//{
+//  typedef typename std::result_of<Func()>::type result_type;
+//  typedef std::packaged_task<result_type()> task_type;
+//  task_type task(std::move(func));
+//  std::future<result_type> result = task.get_future();
+//  sink->send(PretendToBeCopyable<task_type>(std::move(task))); 
+//  return std::move(result);
+//}  
+
+
+
+
   
   
 
@@ -104,38 +226,12 @@ namespace SinkWrapper {
     auto wait_result = g2::spawn_task(add_sink_call, _bg.get());
     wait_result.wait();
     
-    auto handle = std2::make_unique<SinkHandle<T>>(shared);    
+    auto handle = std2::make_unique<SinkHandle<T>>(shared, sink);    
     return handle;
   }
   };
   
   
-  /// The createHandle should reside nside the Worker and probably be called
-  /// addSink instead. Here we get a Sink object and creates a handle for it that we store
-  /// a weakptr to the Sink inside the SinkHandle object
-
-//  template<typename TSink>
-//  std::unique_ptr<SinkHandle<TSink >> createHandle(std::shared_ptr<TSink> ptr) {
-//    auto weak = std::unique_ptr < SinkHandle < TSink >> (new SinkHandle<TSink>(ptr));
-//    return weak;
-//  }
-
-//  typedef Sink<sink1> Sink1;
-//  typedef Sink<sink2> Sink2;
-//
-//  void test2(int i, std::vector<SinkPtr>& container) {
-//    {
-//      for (auto& s : container)
-//        s->send(std::to_string(i)); //if the destructor hits before 
-//
-//
-//    } 
-//    std::cout << "added all jobs\n\n\n\n\n" << std::endl;
-//
-//    //    auto handle = createHandle(wrap1);
-//    //    auto future_result = handle->async2(&sink1::addTextBeforePrint, "###");
-//
-//  }
 
   void test() {
     Worker worker;
@@ -146,9 +242,16 @@ namespace SinkWrapper {
     worker.save("Hola Mundo, otra vez");
     
     
+//    //    auto future_result = handle->async2(&sink1::addTextBeforePrint, "###");
+
+
     // Now call the handlers and give them specific commands
     // These commands will be sent STRAIGHT to the Sink's asynchronous dispatcher
-    //handler_1->
+    // therefore they CAN come before a worker.save() message
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    auto result = handler_1->call(&sink1::addTextBeforePrint, "-------"); 
+    // should this block until finished? Or up to the sender?
+    worker.save("Goodbye. See you later");
   }
 
 } // sinkwrapper
@@ -157,62 +260,7 @@ namespace SinkWrapper {
 
 
 
-//template <typename Func>
-//std::future<typename std::result_of<Func()>::type> spawn_taskX(std::shared_ptr<T> sink, Func func)
-//{
-//  typedef typename std::result_of<Func()>::type result_type;
-//  typedef std::packaged_task<result_type()> task_type;
-//  task_type task(std::move(func));
-//  std::future<result_type> result = task.get_future();
-//  sink->send(PretendToBeCopyable<task_type>(std::move(task))); 
-//  return std::move(result);
-//}  
 
-
-
-//    template<typename Call, typename... Args>
-//    auto async2(Call call, Args... args)->decltype(_handle.lock()->async(call, args...)) {
-//      std::shared_ptr<T> realptr(_handle);
-//      return realptr->async(call, args...);
-//    }
-//    template<typename Call, typename... Args>
-//    auto async2(Call call, Args... args)->decltype(async(bind(call, *(_handle.lock()), args...))) 
-//    {
-//      typedef decltype(async(bind(call, *(_handle.lock()), args...))) ReturnType;
-//      
-//      std::shared_ptr<T> realptr(_handle);
-//      return spawn_taskX(realptr,   std::bind(call, realptr.get(), args...));
-
-//      try
-//      {
-//        std::shared_ptr<T> realptr(_handle);
-//        return spawn_taskX(realptr,   std::bind(call, realptr.get(), args...));
-//      }
-//      catch(const std::bad_weak_ptr& e) 
-//      { // re-throw inside the expected futures
-//        typedef std::promise<ReturnType> PromiseType;
-//        auto promise = make_shared<PromiseType>();
-//      }
-//    }
-
-
-
-//    template <typename Func>
-//    std::future<typename std::result_of<Func()>::type> spawn_taskX(Func func) {
-//      typedef typename std::result_of < Func()>::type result_type;
-//      typedef std::packaged_task < result_type() > task_type;
-//      task_type task(std::move(func));
-//      std::future<result_type> result = task.get_future();
-//      send(PretendToBeCopyable<task_type>(std::move(task)));
-//      return std::move(result);
-//    }
-//
-//
-//    template<typename Call, typename... Args>
-//    auto async(Call call, Args... args)->decltype(async(bind(call, ptr().get(), args...))) {
-//      typedef decltype(async(bind(call, _t.get(), args...))) ReturnType;
-//      return spawn_taskX(std::bind(call, ptr().get(), args...));
-//    }
 
 
 
