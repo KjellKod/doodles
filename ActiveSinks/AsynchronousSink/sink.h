@@ -26,7 +26,7 @@
 
   struct sink2  { 
     std::string post;
-    void addTextAfterPrint(const std::string& text) {  post.append(text);  }
+    std::string addTextAfterPrint(const std::string& text) {  post.append(text);  return post;}
     void save(const std::string& text) {
       std::stringstream ss;
       ss << text << " " << post << " : " << std::this_thread::get_id() << std::endl;

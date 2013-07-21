@@ -38,12 +38,12 @@ namespace SinkWrapper {
 
   /// The Sink has an active object and owns the real object that will do the bg work
   template<class T>
-  class Sink : public SinkWrapper {
+  struct Sink : public SinkWrapper {
     std::unique_ptr<Active> _bg;
-  public:std::shared_ptr<T> _t; // behövs både _t och -sink-stoage???
-  private: AsyncMessageCall _log_call; //the default call from worker->send(msg)
-    //Callback _sink_storage_only; // not needed since we save T
-  public:
+    std::shared_ptr<T> _t; // behövs både _t och -sink-stoage???
+    AsyncMessageCall _log_call; //the default call from worker->send(msg)
+  
+    
     template<typename Call>
     Sink(std::shared_ptr<T> t, Call call)
     : SinkWrapper {},
@@ -67,11 +67,6 @@ namespace SinkWrapper {
       } 
   };
 
- //async(Call call, Args... args)->decltype(async(bind(call, ptr().get(), args...))) {
-//      template<typename Call, typename... Args>
-//    auto async2(Call call, Args... args)->decltype(async(bind.(call, sink.get(), args...))) {
-//    return spawn_taskX(std::bind(call, sink.get(), args...));
-//    }
   
   //Sinkhandle is the client's access point to the specific sink instance
   // Only through the Sinkhandle can, and should, the sink specific API be called
@@ -81,36 +76,28 @@ namespace SinkWrapper {
     std::weak_ptr<Sink<T>> _sink;
     
   public:
-    SinkHandle(std::shared_ptr<T> t, std::shared_ptr<Sink<T>> sink) : _handle(t), _sink(sink) { }
-    ~SinkHandle() { }    
+    SinkHandle(std::shared_ptr<Sink<T>> sink) : _sink(sink) { }
+    ~SinkHandle() { }
+    
     template<typename Call, typename... Args>
-    auto call(Call call, Args... args) -> decltype(_sink.lock()->send(call, args...))
-    {     
-      std::shared_ptr<Sink<T>> sink(_sink); // might throw if sink is empty
-      return sink->send(call, args...); 
+    auto call(Call call, Args... args) -> decltype(_sink.lock()->send(call, args...)) {
+      try
+      {
+        std::shared_ptr < Sink < T >> sink(_sink); // might throw if sink is empty
+        return sink->send(call, args...);
+      }      
+      catch (const std::bad_weak_ptr& e) 
+      {
+        T* t;
+        typedef decltype(std::bind(call, t, args...)()) PromiseType;
+        std::promise<PromiseType> promise;
+        promise.set_exception(std::make_exception_ptr(e));
+        return std::move(promise.get_future()); // needed w/ move? 
+      }
     }
-      
-      //      try {
-//      std::shared_ptr<Sink<T>> sink(_sink); // might throw if sink is empty
-//      return sink->send(call, args...); 
-//      }
-//      catch(const std::bad_weak_ptr& e) {
-//              
-//        std::shared_ptr<Sink<T>> sinkptr;
-//              
-//        typedef decltype(sinkptr->send(call, args...)) ReturnType;
-//        typedef std::promise<ReturnType> PromiseType;
-//
-//        auto promise = std::make_shared<PromiseType>();
-//        promise->set_exception(e);
-//        return promise->get_future();
-//      }     
-//    }    
   };
-  
-//        typedef std::promise<ReturnType> PromiseType;
-//        auto promise = make_shared<PromiseType>();
-//      }
+    
+    
 
   
   
@@ -148,7 +135,7 @@ namespace SinkWrapper {
     auto wait_result = g2::spawn_task(add_sink_call, _bg.get());
     wait_result.wait();
     
-    auto handle = std2::make_unique<SinkHandle<T>>(shared, sink);    
+    auto handle = std2::make_unique<SinkHandle<T>>(sink); 
     return handle;
   }
   };
@@ -156,12 +143,13 @@ namespace SinkWrapper {
   
 
   void test() {
-    Worker worker;
-    worker.save("Hello World!");
-    auto handler_1 = worker.addSink(std2::make_unique<sink1>(), &sink1::print);
-    worker.save("Hello again World!");
-    auto handler_2 = worker.addSink(std2::make_unique<sink2>(), &sink2::save);
-    worker.save("Hola Mundo, otra vez");
+    auto worker = std::make_shared<Worker>();
+    worker->save("Hello World!");
+    auto handler_1 = worker->addSink(std2::make_unique<sink1>(), &sink1::print);
+    
+    worker->save("Hello again World!");
+    auto handler_2 = worker->addSink(std2::make_unique<sink2>(), &sink2::save);
+    worker->save("Hola Mundo, otra vez");
     
     
 //    //    auto future_result = handle->async2(&sink1::addTextBeforePrint, "###");
@@ -173,7 +161,15 @@ namespace SinkWrapper {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     auto result = handler_1->call(&sink1::addTextBeforePrint, "-------"); 
     // should this block until finished? Or up to the sender?
-    worker.save("Goodbye. See you later");
+    worker->save("Goodbye. See you later");
+    
+    
+    worker.reset(); // this should block until all are finished
+    auto result2 = handler_2->call(&sink2::addTextAfterPrint, "-------"); 
+    try { std::cout << result2.get() << std::endl; }
+    catch(std::exception& e) {
+      std::cout << e.what() << std::endl;
+    }
   }
 
 } // sinkwrapper
