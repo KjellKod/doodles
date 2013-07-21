@@ -24,7 +24,7 @@
 #include "sink.h"
 
 namespace SinkWrapper {
-  typedef std::function<void() > AsyncSinkCall;
+  //typedef std::function<void() > AsyncSinkCall;
   typedef std::string LogEntry;
   typedef std::function<void(LogEntry) > AsyncMessageCall;
   /// The wrapper represents any Sink<T> and can therefore be stored as a pointer
@@ -151,8 +151,6 @@ namespace SinkWrapper {
     auto handler_2 = worker->addSink(std2::make_unique<sink2>(), &sink2::save);
     worker->save("Hola Mundo, otra vez");
     
-    
-//    //    auto future_result = handle->async2(&sink1::addTextBeforePrint, "###");
 
 
     // Now call the handlers and give them specific commands
@@ -160,13 +158,18 @@ namespace SinkWrapper {
     // therefore they CAN come before a worker.save() message
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     auto result = handler_1->call(&sink1::addTextBeforePrint, "-------"); 
+    
+    
+    auto result2 = handler_2->call(&sink2::addTextAfterPrint, "-------"); 
+    result2.get();
     // should this block until finished? Or up to the sender?
     worker->save("Goodbye. See you later");
     
     
+    
     worker.reset(); // this should block until all are finished
-    auto result2 = handler_2->call(&sink2::addTextAfterPrint, "-------"); 
-    try { std::cout << result2.get() << std::endl; }
+    auto result3 = handler_2->call(&sink2::addTextAfterPrint, "-------"); 
+    try { std::cout << result3.get() << std::endl; }
     catch(std::exception& e) {
       std::cout << e.what() << std::endl;
     }
@@ -174,79 +177,5 @@ namespace SinkWrapper {
 
 } // sinkwrapper
 
-
-
-
-
-
-
-//  sinkhandler call 
-//template<typename Call, typename... Args>
-//    void sendX(Call call, Args... args){
-//      auto bg_call = std::bind(call, _t.get(), args...);
-//      typedef decltype(bg_call()) ResultType;
-//      
-//      std::future<ResultType> result00 = g2::spawn_task(bg_call, _bg.get()); 
-//      std::future<decltype(bg_call())> result0 = g2::spawn_task(bg_call, _bg.get());  
-//      auto result = g2::spawn_task(bg_call, _bg.get());  
-//      result.wait(); 
-//    } // any type of call
-    
-
-
-//template<typename Fut, typename F, typename T>
-//void set_value(std::promise<Fut>& p, F& f, T&t) {
-//  p.set_value(f(t));
-//}
-//
-//template<typename F, typename T>
-//void set_value(std::promise<void>& p, F& f, T&t) {
-//  f(t);
-//  p.set_value();
-//}
-//
-//template <class T> class concurrent {
-//  mutable T t;
-//  mutable shared_queue<Callback> q;
-//  bool done = false;
-//  std::thread thd;
-//
-//  void run() const {
-//    Callback call;
-//    while (!done) {
-//      q.wait_and_pop(call);
-//      call();
-//    }
-//  }
-//
-//public:
-//  concurrent(T t_)
-//  : t(t_), thd([ = ]{Callback call; while (!done) {
-//q.wait_and_pop(call); call();
-//    }}) {
-//  }
-//
-//  ~concurrent() {
-//    q.push([ = ]{done = true;});
-//    thd.join();
-//  }
-//
-//  template<typename F>
-//  void fireAndForget(F f) {
-//    q.push([ = ]{f(t);});
-//  }
-//
-//  template<typename F>
-//  auto operator()(F f) const -> std::future<decltype(f(t))> {
-//    auto p = std::make_shared < std::promise < decltype(f(t)) >> ();
-//    auto future_result = p->get_future();
-//    q.push([ = ]{
-//      try {
-//        set_value(*p, f, t); } catch (...) {
-//        p->set_exception(std::current_exception()); }
-//    });
-//    return future_result;
-//  }
-//};
 #endif	/* WRAPPER_H */
 
