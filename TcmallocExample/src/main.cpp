@@ -2,7 +2,7 @@
 
 #include <string>
 #include <iostream>
-
+#include <vector>
 #include "Allocate.h"
 #include <gperftools/malloc_extension.h>
 
@@ -18,4 +18,8 @@ int main() {
   size_t heap_after;  
   MallocExtension::instance()->GetNumericProperty("generic.heap_size", &heap_after);
   std::cout << "heap after: " << heap_after/(1024*1024) << " MB" << std::endl; 
+
+  std::vector<char> buffer(2000, '0');
+  MallocExtension::instance()->GetStats(&buffer[0], 2000);
+  std::cout << &buffer[0] << std::endl;
 }
