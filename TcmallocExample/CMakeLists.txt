@@ -19,7 +19,7 @@ endif()
 
 
 set(PLATFORM_LINK_LIBRIES rt)
-set(CMAKE_CXX_FLAGS "-Wall -rdynamic -Wunused -std=c++11 ${CMAKE_CXX_FLAGS_DEBUG} -pthread -D_GLIBCXX_USE_NANOSLEEP")
+set(CMAKE_CXX_FLAGS "-Wall -pthread -rdynamic -Wunused -std=c++11 ${CMAKE_CXX_FLAGS_DEBUG} -pthread -D_GLIBCXX_USE_NANOSLEEP")
 
    # add a Allocator library
    add_library(lib_allocator ${SRC}/Allocate.cpp ${SRC}/Allocate.h)
