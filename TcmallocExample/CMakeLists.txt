@@ -42,13 +42,25 @@ find_package(Tcmalloc)
  target_link_libraries(mallocLink tcmalloc_minimal lib_allocator )
 #${Tcmalloc_LIBRARIES}
 
-#g++ -I ../src -fpic -c ../src/Allocate.cpp -o Allocate.o
-#g++ -shared -o libAllocate.so Allocate.o
-#g++ -std=c++11 -I ../src -L ./ ../src/main.cpp -ltcmalloc_minimal -lAllocate -o Allocate
-#export LD_LIBRARY_PATH=/home/kjell/GitHub/doodles/TcmallocExample/build
+
+# commandline creation of static and dynamic libraries 
+# and linking them with a binary 
+# http://www.iram.fr/~roche/code/c++/AddNumbers.html
+
+# STATIC
+# g++ -I../src -c ../src/Allocate.cpp -o AllocateStatic.o
+# ar rcs libAllocateStatic.a AllocateStatic.o
+# g++ -std=c++11 -I ../src -L ./ ../src/main.cpp -ltcmalloc_minimal -lAllocateStatic -o AllocateStaticEarly
+# g++ -std=c++11 -I ../src -L ./ ../src/main.cpp  -lAllocateStatic -ltcmalloc_minimal -o AllocateStaticLate
+
+# DYNAMIC
+# g++ -I ../src -fpic -c ../src/Allocate.cpp -o Allocate.o
+# g++ -shared -o libAllocate.so Allocate.o
+# g++ -std=c++11 -I ../src -L ./ ../src/main.cpp -ltcmalloc_minimal -lAllocate -o Allocate
+# export LD_LIBRARY_PATH=/home/kjell/GitHub/doodles/TcmallocExample/build
 
 
-#g++ -I ../src -fpic -c ../src/Allocate.cpp -o AllocateLate.o
-#g++ -shared -o libAllocateLate.so AllocateLate.o
-#g++ -std=c++11 -I ../src -L ./ ../src/main.cpp -lAllocateLate -ltcmalloc_minimal -o AllocateLate
-#export LD_LIBRARY_PATH=/home/kjell/GitHub/doodles/TcmallocExample/build
+# g++ -I ../src -fpic -c ../src/Allocate.cpp -o AllocateLate.o
+# g++ -shared -o libAllocateLate.so AllocateLate.o
+# g++ -std=c++11 -I ../src -L ./ ../src/main.cpp -lAllocateLate -ltcmalloc_minimal -o AllocateLate
+# export LD_LIBRARY_PATH=/home/kjell/GitHub/doodles/TcmallocExample/build
