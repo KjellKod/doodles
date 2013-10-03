@@ -138,13 +138,11 @@ namespace SinkWrapper {
     std::vector<SinkWrapperPtr> _container; // should be hidden in a pimple with a bg active object
     std::unique_ptr<Active> _bg;
 
-    void bgSave(LogEntry msg) {
-      for(int i = 0; i < 100;  ++i){ 
-         for (auto& sink : _container) {
-            sink->send(msg);
-         }
+   void bgSave(LogEntry msg) {
+      for (auto& sink : _container) {
+         sink->send(msg);
       }
-    }
+   }
     
 
   public:
@@ -230,7 +228,7 @@ namespace SinkWrapper {
       worker->save("this message should trigger an atomic increment at the sink");
     }
     assert(flag->load() == true);
-    assert(100 == count->load());
+    assert(1 == count->load());
     cout << "test2_one_sink finished\n";
   }
 
@@ -248,8 +246,8 @@ void test_3_OneHundredSinks(){
   
   { auto worker = std::make_shared<Worker>();
   size_t index = 0;
-    for(auto& flag: flags) { 
-      auto& count = counts[index++];
+    for(auto flag: flags) { 
+      auto count = counts[index++];
       // ignore the handle
       worker->addSink(std2::make_unique<ScopedSetTrue>(flag, count), &ScopedSetTrue::ReceiveMsg);
     }
@@ -261,8 +259,11 @@ void test_3_OneHundredSinks(){
   // are processed
    size_t index = 0;
     for(auto& flag: flags) { 
-      auto& count = counts[index++];
+      auto count = counts[index++];
       assert(flag->load());
+      if(2 != count->load()) {
+        std::cout << "load: " << count->load() << std::endl;         
+      }
       assert(2 == count->load());
   }
   
@@ -271,8 +272,8 @@ void test_3_OneHundredSinks(){
   
   
   void test() {
-    test1();
-    test2_one_sink();
+    //test1();
+    //test2_one_sink();
     test_3_OneHundredSinks();
   }
 } // SinkWrapper

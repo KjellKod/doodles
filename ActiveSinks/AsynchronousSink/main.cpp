@@ -18,6 +18,8 @@
 #include "wrapper.h"
 #include "assorted_async_testing.h"
 #include "sink.h"
+#include "DynamicAddSinksWithDifferentTypes.h"
+
 using namespace std;
 using namespace test;
 
@@ -87,6 +89,8 @@ std::future<typename std::result_of<Func()>::type> spawn_taskX(Func func)
 #include "herb_test.h"
 int main() {
   SinkWrapper::test();
+  DynamicAddSinksWithDifferentTypes::test();
+
   std::cout << "all tests finished" << std::endl;
   return 0;
 }

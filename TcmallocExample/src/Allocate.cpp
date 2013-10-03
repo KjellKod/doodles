@@ -3,7 +3,7 @@
 #include "Allocate.h"
 
 namespace {
-const std::string staticStr = Allocate::Create(500*1024*1024);
+static const std::string staticStr = Allocate::Create(size_t(2000)*1024*1024);
 }
 
 namespace Allocate {
